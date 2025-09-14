@@ -1,0 +1,41 @@
+# eclipse
+eclipse
+*.launch
+.settings
+.metadata
+.classpath
+.project
+
+# idea
+.idea/
+out
+*.ipr
+*.iws
+*.iml
+
+# vscode
+.vscode/
+!.vscode/layouts
+
+# visual studio
+.vs/
+
+# gradle
+build/
+.gradle/
+
+# other
+bin/
+run/
+.architectury-transformer/
+
+# Forge MDK
+forge*changelog.txt
+
+*.log
+
+# node
+node_modules
+
+# cargo
+/target/
