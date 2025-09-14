@@ -1,0 +1,34 @@
+modLoader = "javafml"
+loaderVersion = "*"
+issueTrackerURL = "${mod_url_issue}"
+license = "${mod_license}"
+
+[[mods]]
+modId = "resonator"
+version = "${version}"
+displayName = "${mod_name}"
+description = "${mod_description}"
+authors = "Leawind"
+logoFile = "TODO"
+displayURL = "${mod_url_home}"
+
+[[dependencies.resonator]]
+modId = "neoforge"
+type = "required"
+versionRange = "[${neoforge_version},)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.resonator]]
+modId = "minecraft"
+type = "required"
+versionRange = "[${minecraft_version_min},${minecraft_version_max}]"
+ordering = "NONE"
+side = "BOTH"
+referraUrl = "https://www.minecraft.net/"
+
+[[mixins]]
+config = "resonator.mixins.json"
+
+[[mixins]]
+config = "resonator-common.mixins.json"

@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "id": "resonator",
+  "version": "${mod_version}",
+  "name": "${mod_name}",
+  "description": "${mod_description}",
+  "authors": ["Leawind"],
+  "contact": {
+    "homepage": "${mod_url_home}",
+    "issues": "${mod_url_issue}",
+    "sources": "${mod_url_src}",
+    "email": "leawind@yeah.net"
+  },
+  "license": "${mod_license}",
+  "icon": "${mod_icon}",
+  "environment": "*",
+  "entrypoints": {
+    "client": ["io.github.leawind.resonator.fabric.ResonatorFabricClient"],
+    "modmenu": ["io.github.leawind.resonator.fabric.ModMenuEntry"]
+  },
+  "mixins": ["resonator.mixins.json", "resonator-common.mixins.json"],
+  "depends": {
+    "fabric": "*",
+    "minecraft": ">=${minecraft_version_min} <=${minecraft_version_max}"
+  },
+  "recommends": {
+    "modmenu": "*"
+  },
+  "custom": {
+    "modmenu": {
+      "links": {
+        "Modrinth": "https://modrinth.com/mod/resonator",
+        "CurseForge": "https://www.curseforge.com/minecraft/mc-mods/resonator",
+        "BuyMeACoffee": "https://www.buymeacoffee.com/leawind",
+        "Donate": "https://leawind.github.io/Third-Person/en-US/donate?autolang",
+        "MCMOD": "https://www.mcmod.cn/class/12699.html",
+        "Afdian": "https://afdian.com/a/Leawind"
+      }
+    },
+    "modmenu:clientsideOnly": false
+  }
+}

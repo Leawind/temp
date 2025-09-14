@@ -1,0 +1,208 @@
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+
+import java.nio.file.FileVisitResult
+import java.nio.file.Files
+import java.nio.file.SimpleFileVisitor
+import java.nio.file.attribute.BasicFileAttributes
+
+plugins {
+  id "architectury-plugin" version "3.4-SNAPSHOT"
+  // ref: https://maven.architectury.dev/dev/architectury/architectury-loom/
+  id "dev.architectury.loom" version "1.9-SNAPSHOT" apply false
+  // https://plugins.gradle.org/plugin/com.github.johnrengelman.shadow
+  id 'com.github.johnrengelman.shadow' version '8.1.1' apply false
+}
+
+ext {
+  platforms = enabled_platforms.tokenize(',') as List<String>
+  
+  getArchiveVersion = { String platform ->
+    final MC_VERSION_PATTERN = '^\\d+(\\.\\d+){1,2}$'
+    assert platforms.contains(platform)
+    
+    assert minecraft_version =~ MC_VERSION_PATTERN
+    assert minecraft_version_min =~ MC_VERSION_PATTERN
+    assert minecraft_version_max =~ MC_VERSION_PATTERN
+    
+    def minecraft_version_text = "${minecraft_version_min}"
+    if(minecraft_version_max != minecraft_version_min) minecraft_version_text += "-${minecraft_version_max}"
+    
+    return "${mod_version}-mc${minecraft_version_text}-${platform}"
+  }
+  
+  getArchiveFileName = { String platform -> "${mod_id}-${getArchiveVersion(platform)}.jar"
+  }
+}
+
+architectury {
+  minecraft = minecraft_version
+}
+
+allprojects {
+  version = mod_version
+  group = mod_group_id
+  
+  tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
+    options.release = JavaLanguageVersion.of(java_version).asInt()
+  }
+  tasks.withType(GroovyCompile).configureEach {
+    options.encoding "UTF-8"
+  }
+}
+
+subprojects {
+  apply plugin: 'dev.architectury.loom'
+  apply plugin: 'architectury-plugin'
+  apply plugin: 'maven-publish'
+  
+  loom { silentMojangMappingsLicense() }
+  
+  repositories {
+    mavenCentral()
+    maven { url 'https://jitpack.io' }
+    maven { url 'https://maven.shedaniel.me/' }
+    maven { url = 'https://maven.parchmentmc.org' }
+  }
+  
+  dependencies {
+    minecraft "net.minecraft:minecraft:$minecraft_version"
+    //		mappings loom.officialMojangMappings()
+    
+    mappings loom.layered() {
+      officialMojangMappings()
+      parchment("org.parchmentmc.data:parchment-${parchment_version}@zip")
+    }
+  }
+  
+  /// Modify pack.mcmeta
+  ///
+  /// - set `pack_format` from property `resource_pack_format`
+  /// - expand properties
+  processResources {
+    filesMatching("pack.mcmeta") { fcd ->
+      File f = fcd.file
+      if(!f.exists()){
+        println "File not exist: " + f
+        return
+      }
+      try{
+        Map meta = new JsonSlurper().parse(f) as Map
+        ((Map) meta.pack).pack_format = Integer.parseInt(resource_pack_format)
+        
+        def writer = new FileWriter(f)
+        writer.write(JsonOutput.prettyPrint(JsonOutput.toJson(meta)))
+        writer.close()
+      }catch(Exception e){
+        throw new RuntimeException("Failed to process file: ${f}\n$e.message}")
+      }
+    }
+    eachFile {
+      expand rootProject.properties
+    }
+  }
+  
+  /// After build, copy jar file from `<loader>/build/libs/` to `build/libs/`
+  tasks.named("build") {
+    if(platforms.contains(project.name)){
+      doLast {
+        var fileName = getArchiveFileName(project.name)
+        println "File name: '$fileName'"
+        
+        var srcFile = project.file("build/libs/${fileName}")
+        if(srcFile.exists()){
+          var dstFile = project.rootProject.file("build/libs/${fileName}")
+          if(dstFile.exists()){
+            delete dstFile.toPath()
+          }else{
+            dstFile.parentFile.mkdirs()
+          }
+          println "Copying\n from: ${srcFile}\n   to: ${dstFile}"
+          Files.copy(srcFile.toPath(), dstFile.toPath())
+        }else{
+          println "Jar file not found: ${srcFile}"
+        }
+      }
+    }
+  }
+}
+
+/// Link `run/` dirs
+///
+/// Link some files and directories from `fabric/run/` and `neoforge/run/` to `common/run/`
+tasks.register("linkRuns") {
+  group "loom"
+  description "Link running dirs"
+  def linkFileTo = { File src, File tar ->
+    if(src.isDirectory()){
+      if(tar.exists()){
+        delete src.toPath()
+      }else{
+        if(src.isDirectory()){
+          Files.move(src.toPath(), tar.toPath())
+        }else{
+          delete src.toPath()
+          tar.mkdirs()
+        }
+      }
+      Files.createLink(src.toPath(), tar.toPath())
+    }else{
+      if(src.exists() && tar.exists()) delete tar.toPath()
+      if(src.exists()) Files.move(src.toPath(), tar.toPath())
+      if(tar.exists()) Files.createLink(src.toPath(), tar.toPath())
+    }
+  }
+  def linkDirTo = { File src, File tar ->
+    if(tar.exists()){
+      if(src.isDirectory()){
+        // Recursively move overwrite
+        Files.walkFileTree(src.toPath(), new SimpleFileVisitor<java.nio.file.Path>(){
+          @Override
+          FileVisitResult visitFile(java.nio.file.Path file, BasicFileAttributes attrs) throws IOException{
+            if(file.toFile().isFile()){
+              java.nio.file.Path dst = tar.toPath().resolve(src.toPath().relativize(file))
+              dst.parent.toFile().mkdirs()
+              delete dst
+              Files.move(file, dst)
+            }
+            return FileVisitResult.CONTINUE
+          }
+        })
+      }
+      delete src.toPath()
+    }else{
+      if(src.isDirectory()){
+        Files.move(src.toPath(), tar.toPath())
+      }else{
+        delete src.toPath()
+        tar.mkdirs()
+      }
+    }
+    Files.createSymbolicLink(src.toPath(), tar.toPath())
+  }
+  doLast {
+    String[] linkedFiles = ["options.txt"]
+    String[] linkedDirs = ["saves", "resourcepacks", "generated", "shaderpacks", "screenshots"]
+    def commonRunDir = project("common").file("run")
+    mkdir commonRunDir
+    linkedDirs.each {
+      mkdir new File(commonRunDir, it).toPath()
+    }
+    for(String platform : platforms){
+      File platformRunDir = project(platform).file("run")
+      if(!platformRunDir.isDirectory()){
+        mkdir platformRunDir
+        return
+      }
+      linkedFiles.each {
+        println "Linking file from \n\t${src}\n\tto\n\t${tar}"
+        linkFileTo(new File(platformRunDir, it), new File(commonRunDir, it))
+      }
+      linkedDirs.each {
+        println "Linking directory from \n\t${src}\n\tto\n\t${tar}"
+        linkDirTo(new File(platformRunDir, it), new File(commonRunDir, it))
+      }
+    }
+  }
+}
